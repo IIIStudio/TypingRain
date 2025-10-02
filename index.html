@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>字母雨打字游戏</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+      background: radial-gradient(1200px 600px at 80% -100%, rgba(56,189,248,0.2), transparent), linear-gradient(135deg, #0f172a, #1e293b 60%, #0b1220);
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      overflow: hidden;
+    }
+    .container { width: 100%; max-width: 980px; }
+    header { margin-bottom: 16px; text-align: center; }
+    h1 { font-size: 28px; letter-spacing: .5px; }
+    .subtitle { margin-top: 6px; opacity: .85; font-size: 14px; }
+    .info {
+      display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 8px;
+      margin: 14px 0;
+    }
+    .box {
+      background: rgba(0,0,0,.28);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 12px; padding: 10px 12px; text-align: center;
+    }
+    .box .t { font-size: 12px; color: #a3a3a3; }
+    .box .v { font-size: 20px; font-weight: 700; margin-top: 4px; }
+    .game {
+      position: relative; width: 100%; height: 480px;
+      background: rgba(0,0,0,.22);
+      border: 1px solid rgba(255,255,255,.1);
+      border-radius: 12px; overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25) inset;
+    }
+    .letter {
+      position: absolute;
+      left: 0; top: 0; transform: translate3d(-9999px,-9999px,0);
+      font-size: 28px; font-weight: 800; letter-spacing: .5px;
+      color: #fff; text-shadow: 0 2px 6px rgba(0,0,0,.5);
+      user-select: none; will-change: transform;
+      transition: scale .1s ease, filter .15s ease;
+      pointer-events: none;
+    }
+    .comboFX {
+      position: absolute;
+      left: 0; top: 0;
+      transform: translate3d(-9999px,-9999px,0);
+      font-size: 20px;
+      font-weight: 800;
+      color: #ffcc00;
+      text-shadow: 0 2px 6px rgba(0,0,0,.6);
+      pointer-events: none;
+      opacity: 0;
+      will-change: transform, opacity;
+      animation: comboUp 800ms ease-out forwards;
+    }
+    .comboFX.bonus { color: #f87171; } /* 高连击带加分显示为红色 */
+    @keyframes comboUp {
+      0%   { transform: translate3d(var(--x,0), calc(var(--y,0)), 0) scale(1); opacity: 0; }
+      10%  { opacity: 1; }
+      100% { transform: translate3d(var(--x,0), calc(var(--y,0) - 60px), 0) scale(1.2); opacity: 0; }
+    }
+    .controls {
+      display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;
+      margin-top: 14px;
+    }
+    .chip {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: rgba(0,0,0,.28);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 999px; padding: 8px 14px;
+      font-size: 14px;
+    }
+    button {
+      background: #111c32; color: #fff;
+      border: 1px solid rgba(255,255,255,.16);
+      padding: 10px 16px; border-radius: 10px;
+      cursor: pointer; transition: transform .06s ease, background .2s ease, border-color .2s ease;
+    }
+    button:hover { background: #13213b; border-color: rgba(255,255,255,.3); }
+    button:active { transform: translateY(1px); }
+    button.active { background: #1f2d4a; border-color: rgba(56,189,248,.6); }
+    .over {
+      position: absolute; inset: 0; display: none; place-items: center;
+      background: rgba(0,0,0,.75); z-index: 10;
+    }
+    .overcard {
+      background: rgba(15,23,42,.9);
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 14px; padding: 20px 22px; text-align: center; width: 88%;
+      max-width: 420px; box-shadow: 0 10px 40px rgba(0,0,0,.4);
+      animation: pop .35s ease both;
+    }
+    .overcard h2 { font-size: 22px; color: #f87171; margin-bottom: 8px; }
+    .ovstats { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin: 10px 0; }
+    .ovstats .box { padding: 10px; }
+    @keyframes pop { 0% { transform: scale(.8); opacity: 0; } 70% { transform: scale(1.05); } 100% { transform: scale(1); opacity: 1; } }
+    @media (max-width: 768px) {
+      .info { grid-template-columns: repeat(2,minmax(0,1fr)); }
+      .game { height: 400px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>字母雨打字游戏</h1>
+      <div class="subtitle">输入下落的字母，训练反应与打字速度。命中得分，落地扣生命。</div>
+    </header>
+
+    <div class="info">
+      <div class="box"><div class="t">得分</div><div class="v" id="score">0</div></div>
+      <div class="box"><div class="t">正确率</div><div class="v" id="acc">100%</div></div>
+      <div class="box"><div class="t">连击</div><div class="v" id="combo">0</div></div>
+      <div class="box"><div class="t">生命</div><div class="v" id="lives">5</div></div>
+      <div class="box"><div class="t">速度</div><div class="v" id="speed">1.0x</div></div>
+    </div>
+
+    <div class="game" id="game">
+      <div class="over" id="over">
+        <div class="overcard">
+          <h2>游戏结束</h2>
+          <div>最终得分：<b id="fScore">0</b></div>
+          <div>最高连击：<b id="fCombo">0</b></div>
+          <div class="ovstats">
+            <div class="box"><div class="t">正确率</div><div class="v" id="fAcc">100%</div></div>
+            <div class="box"><div class="t">时长</div><div class="v"><span id="fTime">0</span>s</div></div>
+          </div>
+          <button id="btnRestart" style="margin-top:8px;">再玩一次</button>
+          <button id="btnLater" style="margin-top:8px;margin-left:8px;">等下再玩</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="chip">
+        <span>速度</span>
+        <button id="spdDown">-</button>
+        <b id="spdCur">1.0</b>
+        <button id="spdUp">+</button>
+      </div>
+      <button id="btnStart">开始</button>
+      <button id="btnPause">暂停</button>
+      <button id="btnReset">重置</button>
+      <button id="btnChallenge">挑战模式</button>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      'use strict';
+      // DOM
+      const el = {
+        game: document.getElementById('game'),
+        score: document.getElementById('score'),
+        acc: document.getElementById('acc'),
+        combo: document.getElementById('combo'),
+        lives: document.getElementById('lives'),
+        speed: document.getElementById('speed'),
+        spdDown: document.getElementById('spdDown'),
+        spdUp: document.getElementById('spdUp'),
+        spdCur: document.getElementById('spdCur'),
+        btnStart: document.getElementById('btnStart'),
+        btnPause: document.getElementById('btnPause'),
+        btnReset: document.getElementById('btnReset'),
+        btnChallenge: document.getElementById('btnChallenge'),
+        over: document.getElementById('over'),
+        fScore: document.getElementById('fScore'),
+        fCombo: document.getElementById('fCombo'),
+        fAcc: document.getElementById('fAcc'),
+        fTime: document.getElementById('fTime'),
+        btnRestart: document.getElementById('btnRestart'),
+        btnLater: document.getElementById('btnLater'),
+      };
+
+      // 状态
+      const ABC = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      const S = {
+        running: false,
+        paused: false,
+        challenge: false,
+        score: 0,
+        tries: 0,
+        hits: 0,
+        combo: 0,
+        maxCombo: 0,
+        lives: 5,
+        speed: 1.0,        // 全局速度倍率（0.5~3.0）
+        spawnMs: 900,      // 生成间隔（会随难度调整）
+        letterBase: 110,   // px/s 基础下落速度
+        letters: [],       // {el, ch, x, y, v}
+        areaW: 0, areaH: 0,
+        raf: 0,
+        lastSpawn: 0,
+        lastTs: 0,
+        startAt: 0,
+        lastLvUp: 0,
+      };
+
+      function fmtAcc() {
+        const acc = S.tries > 0 ? Math.round((S.hits / S.tries) * 100) : 100;
+        return acc + '%';
+      }
+      function syncHUD() {
+        el.score.textContent = S.score;
+        el.combo.textContent = S.combo;
+        el.lives.textContent = S.lives;
+        el.speed.textContent = S.speed.toFixed(1) + 'x';
+        el.spdCur.textContent = S.speed.toFixed(1);
+        el.acc.textContent = fmtAcc();
+      }
+      function measure() {
+        const rect = el.game.getBoundingClientRect();
+        S.areaW = rect.width;
+        S.areaH = rect.height;
+      }
+      function clearLetters() {
+        for (const L of S.letters) {
+          if (L.el && L.el.parentNode) L.el.parentNode.removeChild(L.el);
+        }
+        S.letters.length = 0;
+      }
+      function reset(all = true) {
+        if (S.raf) cancelAnimationFrame(S.raf);
+        clearLetters();
+        if (all) {
+          S.score = 0; S.tries = 0; S.hits = 0; S.combo = 0; S.maxCombo = 0;
+          S.lives = 5; S.speed = 1.0; S.spawnMs = 900;
+          S.lastLvUp = 0;
+        }
+        S.running = false; S.paused = false;
+        S.lastSpawn = 0; S.lastTs = 0; S.startAt = 0;
+        el.btnPause.textContent = '暂停';
+        el.btnStart.disabled = false;
+        el.over.style.display = 'none';
+        syncHUD(); measure();
+      }
+
+      // 生成/移除字母
+      function spawn(ts) {
+        if (S.letters.length > 22) return; // 并发上限
+        if (ts - S.lastSpawn < S.spawnMs) return;
+        S.lastSpawn = ts;
+
+        const ch = ABC[(Math.random() * ABC.length) | 0];
+        const x = Math.random() * Math.max(0, S.areaW - 40) + 8;
+        const v = S.letterBase * (0.8 + Math.random() * 0.5); // px/s
+        const elL = document.createElement('div');
+        elL.className = 'letter';
+        elL.textContent = ch;
+        el.game.appendChild(elL);
+
+        const L = { el: elL, ch, x, y: -36, v };
+        S.letters.push(L);
+        // 初始定位
+        elL.style.transform = `translate3d(${L.x}px, ${L.y}px, 0)`;
+      }
+      function removeLetterAt(i) {
+        const L = S.letters[i];
+        if (!L) return;
+        if (L.el && L.el.parentNode) L.el.parentNode.removeChild(L.el);
+        S.letters.splice(i, 1);
+      }
+
+      // 命中逻辑：优先消除“离底部最近”的该字母
+      function showCombo(x, y, combo, add) {
+        const fx = document.createElement('div');
+        fx.className = 'comboFX' + (combo >= 10 ? ' bonus' : '');
+        fx.textContent = combo >= 10 ? `连击 x${combo}! +${add - 1 + 1}分` : `连击 x${combo}!`;
+        // 由于容器用 translate3d 定位元素，这里通过 CSS 变量传入坐标避免重排
+        fx.style.setProperty('--x', x + 'px');
+        fx.style.setProperty('--y', y + 'px');
+        // 初始 transform 与动画将使用上述变量
+        fx.style.transform = `translate3d(${x}px, ${y}px, 0)`;
+        el.game.appendChild(fx);
+        setTimeout(() => { if (fx.parentNode) fx.parentNode.removeChild(fx); }, 900);
+      }
+
+      function hitChar(k) {
+        if (!S.running || S.paused) return;
+        if (!ABC.includes(k)) return;
+        let idx = -1, bestY = -1;
+        for (let i = 0; i < S.letters.length; i++) {
+          const L = S.letters[i];
+          if (L.ch === k && L.y > bestY) { bestY = L.y; idx = i; }
+        }
+        S.tries++;
+        if (idx >= 0) {
+          // 命中加分：基础 1 分，>=10 连击每次 +2
+          const add = 1 + (S.combo >= 10 ? 2 : 0);
+          S.score += add;
+          S.hits++;
+          S.combo++;
+          S.maxCombo = Math.max(S.maxCombo, S.combo);
+          // 命中特效：字母轻微亮起 + 漂浮连击文本
+          const L = S.letters[idx];
+          const elHit = L.el;
+          elHit.style.filter = 'brightness(1.8)';
+          elHit.style.scale = '1.2';
+          // 展示连击飘字（在加分与连击更新后使用新连击数）
+          showCombo(L.x, L.y, S.combo, add);
+          setTimeout(() => { if (elHit) { elHit.style.filter = 'brightness(1)'; elHit.style.scale = '1'; } }, 120);
+          removeLetterAt(idx);
+        } else {
+          // 失误：不中任何字母，连击断
+          S.combo = 0;
+        }
+        syncHUD();
+      }
+
+      // 落地（扣生命）
+      function miss() {
+        S.combo = 0;
+        S.lives = Math.max(0, S.lives - 1);
+        if (S.lives === 0) return gameOver();
+        syncHUD();
+      }
+
+      // 难度（挑战模式：每 10s +0.1x，spawnMs 逐步减少）
+      function challengeTick(ts) {
+        if (!S.challenge) return;
+        if (!S.lastLvUp) S.lastLvUp = ts;
+        if (ts - S.lastLvUp >= 10000) {
+          S.lastLvUp = ts;
+          S.speed = Math.min(3.0, +(S.speed + 0.1).toFixed(1));
+          S.spawnMs = Math.max(260, S.spawnMs - 40);
+          syncHUD();
+        }
+      }
+
+      // 循环
+      function loop(ts) {
+        if (!S.running) return;
+        if (S.paused) { S.raf = requestAnimationFrame(loop); return; }
+        if (!S.lastTs) S.lastTs = ts;
+        const dt = Math.min(50, ts - S.lastTs); // ms
+        S.lastTs = ts;
+
+        // 生成/难度
+        spawn(ts);
+        challengeTick(ts);
+
+        // 位置更新
+        const mul = (dt / 1000) * S.speed;
+        for (let i = S.letters.length - 1; i >= 0; i--) {
+          const L = S.letters[i];
+          L.y += L.v * mul;
+          L.el.style.transform = `translate3d(${L.x}px, ${L.y}px, 0)`;
+          if (L.y > S.areaH) {
+            removeLetterAt(i);
+            miss();
+          }
+        }
+
+        S.raf = requestAnimationFrame(loop);
+      }
+
+      // 控制
+      function start() {
+        if (S.running) return;
+        S.running = true; S.paused = false;
+        S.startAt = performance.now();
+        S.lastTs = 0; S.lastSpawn = 0; S.lastLvUp = 0;
+        el.btnStart.disabled = true;
+        el.btnPause.textContent = '暂停';
+        measure();
+        S.raf = requestAnimationFrame(loop);
+      }
+      function pause() {
+        if (!S.running) return;
+        S.paused = !S.paused;
+        el.btnPause.textContent = S.paused ? '继续' : '暂停';
+        if (!S.paused) S.raf = requestAnimationFrame(loop);
+      }
+      function gameOver() {
+        S.running = false; S.paused = false;
+        if (S.raf) cancelAnimationFrame(S.raf);
+        // 结算
+        const dur = Math.round((performance.now() - S.startAt) / 1000);
+        el.fScore.textContent = S.score;
+        el.fCombo.textContent = S.maxCombo;
+        el.fAcc.textContent = fmtAcc();
+        el.fTime.textContent = dur;
+        el.over.style.display = 'grid';
+        el.btnStart.disabled = false;
+        el.btnPause.textContent = '暂停';
+      }
+      function setSpeed(delta) {
+        S.speed = Math.max(0.5, Math.min(3.0, +(S.speed + delta).toFixed(1)));
+        // 同步生成频率与速度的关系（越快越密）
+        const t = (3.0 - S.speed); // 0~2.5
+        S.spawnMs = Math.round(300 + t * 300); // 速度越大 spawn 越小（300~1050）
+        syncHUD();
+      }
+      function toggleChallenge() {
+        S.challenge = !S.challenge;
+        el.btnChallenge.classList.toggle('active', S.challenge);
+        el.btnChallenge.textContent = S.challenge ? '挑战模式(开启)' : '挑战模式';
+        if (S.challenge) { S.speed = 1.0; S.spawnMs = 900; S.lastLvUp = 0; syncHUD(); }
+      }
+
+      // 键盘
+      function onKey(e) {
+        if (!S.running || S.paused) return;
+        const k = e.key.toUpperCase();
+        if (k.length === 1 && ABC.includes(k)) {
+          e.preventDefault();
+          hitChar(k);
+        }
+      }
+
+      // 事件
+      window.addEventListener('resize', measure);
+      document.addEventListener('keydown', onKey, { passive: false });
+      el.btnStart.addEventListener('click', start);
+      el.btnPause.addEventListener('click', pause);
+      el.btnReset.addEventListener('click', () => reset(true));
+      el.btnRestart.addEventListener('click', () => { reset(true); start(); });
+      el.btnLater.addEventListener('click', () => { reset(true); });
+      el.spdUp.addEventListener('click', () => setSpeed(+0.1));
+      el.spdDown.addEventListener('click', () => setSpeed(-0.1));
+      el.btnChallenge.addEventListener('click', toggleChallenge);
+
+      // 初始化
+      reset(true);
+      measure();
+    })();
+  </script>
+    </script>
+    
+        <style>
+        .corner-links {
+            position: fixed;
+            right: 20px;
+            bottom: 20px;
+            display: flex;
+            align-items: center;
+            z-index: 9999;
+        }
+        .corner-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            color: #ffffff;
+            text-decoration: none;
+            transition: all 0.3s ease;
+        }
+        .corner-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(255, 255, 255, 0.15);
+        }
+        .corner-link img,
+        .corner-link svg {
+            width: 22px;
+            height: 22px;
+        }
+        .corner-link .label {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+    </style>
+    <div class="corner-links" aria-label="页面固定链接">
+        <a class="corner-link" href="https://github.com/IIIStudio/TypingRain" target="_blank" rel="noopener noreferrer" aria-label="前往 GitHub 仓库">
+            <!-- 内联 GitHub 图标，避免外部资源依赖 -->
+            <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg">
+                <path fill="#ffffff" d="M12 .5a12 12 0 0 0-3.79 23.41c.6.11.82-.26.82-.58v-2.02c-3.35.73-4.06-1.61-4.06-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.75.08-.74.08-.74 1.2.09 1.83 1.23 1.83 1.23 1.07 1.83 2.8 1.3 3.49.99.11-.78.42-1.3.76-1.6-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.13-.3-.54-1.51.12-3.15 0 0 1.01-.32 3.3 1.23.96-.27 1.99-.4 3.01-.4s2.05.14 3.01.4c2.29-1.55 3.3-1.23 3.3-1.23.66 1.64.25 2.85.12 3.15.77.84 1.24 1.91 1.24 3.22 0 4.61-2.8 5.63-5.47 5.93.43.37.81 1.1.81 2.22v3.29c0 .32.22.7.83.58A12 12 0 0 0 12 .5Z"/>
+            </svg>
+            <span class="label">TypingRain</span>
+        </a>
+        <a class="corner-link" href="https://cnb.cool/IIIStudio/HTML/Game/TypingRain/" target="_blank" rel="noopener noreferrer" aria-label="前往 TypingRain 文档页面">
+            <img src="https://docs.cnb.cool/images/logo/svg/LogoColorfulIcon.svg" alt="CNB Logo">
+        </a>
+    </div>
+</body>
+</html>
