@@ -81,7 +81,7 @@
     button {
       background: #111c32; color: #fff;
       border: 1px solid rgba(255,255,255,.16);
-      padding: 10px 16px; border-radius: 10px;
+      padding: 3px 16px; border-radius: 10px;
       cursor: pointer; transition: transform .06s ease, background .2s ease, border-color .2s ease;
     }
     button:hover { background: #13213b; border-color: rgba(255,255,255,.3); }
@@ -106,6 +106,21 @@
       .info { grid-template-columns: repeat(2,minmax(0,1fr)); }
       .game { height: 400px; }
     }
+    /* 游戏结束弹窗按钮高度增强 */
+    .overcard button { padding: 8px 16px; }
+    /* 开关样式（钢琴声效） */
+    .switch { position: relative; display: inline-block; width: 46px; height: 26px; vertical-align: middle; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .switch .slider {
+      position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+      background: #334155; border: 1px solid rgba(255,255,255,.2); transition: .2s; border-radius: 999px;
+    }
+    .switch .slider:before {
+      content: ""; position: absolute; height: 20px; width: 20px; left: 3px; top: 2px; background: #fff;
+      transition: .2s; border-radius: 50%;
+    }
+    .switch input:checked + .slider { background: #1f2d4a; border-color: rgba(56,189,248,.6); }
+    .switch input:checked + .slider:before { transform: translateX(20px); }
   </style>
 </head>
 <body>
@@ -131,10 +146,11 @@
           <div>最高连击：<b id="fCombo">0</b></div>
           <div class="ovstats">
             <div class="box"><div class="t">正确率</div><div class="v" id="fAcc">100%</div></div>
-            <div class="box"><div class="t">时长</div><div class="v"><span id="fTime">0</span>s</div></div>
+            <div class="box"><div class="t">时长</div><div class="v"><span id="fTime">00:00:00</span></div></div>
           </div>
           <button id="btnRestart" style="margin-top:8px;">再玩一次</button>
           <button id="btnLater" style="margin-top:8px;margin-left:8px;">等下再玩</button>
+          <button id="btnDownload" style="margin-top:8px;margin-left:8px;display:none;">下载录音</button>
         </div>
       </div>
     </div>
@@ -146,10 +162,39 @@
         <b id="spdCur">1.0</b>
         <button id="spdUp">+</button>
       </div>
+      <div class="chip">
+        <span>钢琴声效</span>
+        <label class="switch"><input id="pianoSwitch" type="checkbox" /><span class="slider"></span></label>
+        <button id="btnRecord">录制</button>
+      </div>
       <button id="btnStart">开始</button>
       <button id="btnPause">暂停</button>
       <button id="btnReset">重置</button>
       <button id="btnChallenge">挑战模式</button>
+      <button id="btnBoard">榜单</button>
+    </div>
+    <!-- 榜单弹窗 -->
+    <div id="boardModal" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.6);backdrop-filter:saturate(140%) blur(2px);">
+      <div style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(15,23,42,.95);border:1px solid rgba(255,255,255,.12);border-radius:14px;width:min(860px,92vw);max-width:860px;max-height:min(70vh,560px);box-shadow:0 10px 40px rgba(0,0,0,.5);display:flex;flex-direction:column;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,.08);">
+          <div style="font-weight:700;">挑战榜单</div>
+          <button id="btnBoardClose" style="padding:6px 10px;border-radius:8px;background:#111c32;color:#fff;border:1px solid rgba(255,255,255,.16);">关闭</button>
+        </div>
+        <div style="padding:10px;overflow:auto;">
+          <table class="board-table" style="width:100%;font-size:14px;border-collapse:collapse;">
+            <thead>
+              <tr>
+                <th style="text-align:left;padding:6px 8px;position:sticky;top:0;background:rgba(15,23,42,.95);">时间</th>
+                <th style="text-align:right;padding:6px 8px;position:sticky;top:0;background:rgba(15,23,42,.95);">最终得分</th>
+                <th style="text-align:right;padding:6px 8px;position:sticky;top:0;background:rgba(15,23,42,.95);">最高连击</th>
+                <th style="text-align:right;padding:6px 8px;position:sticky;top:0;background:rgba(15,23,42,.95);">正确率</th>
+                <th style="text-align:right;padding:6px 8px;position:sticky;top:0;background:rgba(15,23,42,.95);">时长</th>
+              </tr>
+            </thead>
+            <tbody id="boardRows"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -171,6 +216,12 @@
         btnPause: document.getElementById('btnPause'),
         btnReset: document.getElementById('btnReset'),
         btnChallenge: document.getElementById('btnChallenge'),
+        pianoSwitch: document.getElementById('pianoSwitch'),
+        btnRecord: document.getElementById('btnRecord'),
+        btnBoard: document.getElementById('btnBoard'),
+        boardModal: document.getElementById('boardModal'),
+        btnBoardClose: document.getElementById('btnBoardClose'),
+        boardRows: document.getElementById('boardRows'),
         over: document.getElementById('over'),
         fScore: document.getElementById('fScore'),
         fCombo: document.getElementById('fCombo'),
@@ -178,6 +229,7 @@
         fTime: document.getElementById('fTime'),
         btnRestart: document.getElementById('btnRestart'),
         btnLater: document.getElementById('btnLater'),
+        btnDownload: document.getElementById('btnDownload'),
       };
 
       // 状态
@@ -192,7 +244,7 @@
         combo: 0,
         maxCombo: 0,
         lives: 5,
-        speed: 1.0,        // 全局速度倍率（0.5~3.0）
+        speed: 1.0,        // 全局速度倍率（0.5~5.0）
         spawnMs: 900,      // 生成间隔（会随难度调整）
         letterBase: 110,   // px/s 基础下落速度
         letters: [],       // {el, ch, x, y, v}
@@ -202,6 +254,13 @@
         lastTs: 0,
         startAt: 0,
         lastLvUp: 0,
+        soundOn: false,
+        audioCtx: null,
+        mediaDest: null,
+        recorder: null,
+        recordChunks: [],
+        recordBlob: null,
+        isRecording: false,
       };
 
       function fmtAcc() {
@@ -229,6 +288,7 @@
       }
       function reset(all = true) {
         if (S.raf) cancelAnimationFrame(S.raf);
+        if (S.isRecording) stopRecording();
         clearLetters();
         if (all) {
           S.score = 0; S.tries = 0; S.hits = 0; S.combo = 0; S.maxCombo = 0;
@@ -329,7 +389,7 @@
         if (!S.lastLvUp) S.lastLvUp = ts;
         if (ts - S.lastLvUp >= 10000) {
           S.lastLvUp = ts;
-          S.speed = Math.min(3.0, +(S.speed + 0.1).toFixed(1));
+          S.speed = Math.min(5.0, +(S.speed + 0.1).toFixed(1));
           S.spawnMs = Math.max(260, S.spawnMs - 40);
           syncHUD();
         }
@@ -382,21 +442,32 @@
       function gameOver() {
         S.running = false; S.paused = false;
         if (S.raf) cancelAnimationFrame(S.raf);
+        if (S.isRecording) { stopRecording(); if (el.btnRecord) el.btnRecord.textContent = '录制'; }
         // 结算
         const dur = Math.round((performance.now() - S.startAt) / 1000);
         el.fScore.textContent = S.score;
         el.fCombo.textContent = S.maxCombo;
         el.fAcc.textContent = fmtAcc();
-        el.fTime.textContent = dur;
+        el.fTime.textContent = fmtHMS(dur);
+        // 仅在挑战模式下记录榜单
+        if (S.challenge) addBoardEntry({
+          ts: Date.now(),
+          score: S.score,
+          combo: S.maxCombo,
+          acc: fmtAcc(),
+          dur
+        });
         el.over.style.display = 'grid';
+        if (el.btnDownload) el.btnDownload.style.display = S.recordBlob ? '' : 'none';
         el.btnStart.disabled = false;
         el.btnPause.textContent = '暂停';
       }
       function setSpeed(delta) {
-        S.speed = Math.max(0.5, Math.min(3.0, +(S.speed + delta).toFixed(1)));
+        S.speed = Math.max(0.5, Math.min(5.0, +(S.speed + delta).toFixed(1)));
         // 同步生成频率与速度的关系（越快越密）
-        const t = (3.0 - S.speed); // 0~2.5
-        S.spawnMs = Math.round(300 + t * 300); // 速度越大 spawn 越小（300~1050）
+        // 基于区间 [0.5, 5.0] 的归一化映射，保持 300~1050 范围
+        const t = (5.0 - S.speed) / 4.5; // 1.0(0.5x) ~ 0.0(5.0x)
+        S.spawnMs = Math.round(300 + t * 750); // 速度越大 spawn 越小（300~1050）
         syncHUD();
       }
       function toggleChallenge() {
@@ -406,12 +477,184 @@
         if (S.challenge) { S.speed = 1.0; S.spawnMs = 900; S.lastLvUp = 0; syncHUD(); }
       }
 
+      // 挑战榜单 & 时长格式化
+      function fmtHMS(sec) {
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        const s = sec % 60;
+        const pad = n => String(n).padStart(2, '0');
+        return `${pad(h)}:${pad(m)}:${pad(s)}`;
+      }
+      const BoardKey = 'TypingRainChallengeBoard';
+      function loadBoard() {
+        try {
+          const raw = localStorage.getItem(BoardKey);
+          return raw ? JSON.parse(raw) : [];
+        } catch (_) { return []; }
+      }
+      function saveBoard(arr) {
+        try { localStorage.setItem(BoardKey, JSON.stringify(arr)); } catch (_) {}
+      }
+      function addBoardEntry(entry) {
+        const arr = loadBoard();
+        arr.unshift(entry);
+        if (arr.length > 30) arr.length = 30;
+        saveBoard(arr);
+        renderBoard();
+      }
+      function renderBoard() {
+        const arr = loadBoard();
+        const rows = arr.map(e => {
+          const dt = new Date(e.ts);
+          const timeStr = `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')} ${String(dt.getHours()).padStart(2,'0')}:${String(dt.getMinutes()).padStart(2,'0')}`;
+          return `<tr>
+            <td style="padding:6px 8px;">${timeStr}</td>
+            <td style="padding:6px 8px;text-align:right;">${e.score}</td>
+            <td style="padding:6px 8px;text-align:right;">${e.combo}</td>
+            <td style="padding:6px 8px;text-align:right;">${e.acc}</td>
+            <td style="padding:6px 8px;text-align:right;">${fmtHMS(e.dur)}</td>
+          </tr>`;
+        }).join('');
+        if (el.boardRows) el.boardRows.innerHTML = rows || '';
+      }
+      function toggleBoard() {
+        const hidden = (el.boardModal.style.display === 'none' || !el.boardModal.style.display);
+        if (hidden) {
+          renderBoard();
+          el.boardModal.style.display = 'block';
+        } else {
+          el.boardModal.style.display = 'none';
+        }
+      }
+
+      // 声音：WebAudio 简易钢琴合成
+      function ensureCtx() {
+        if (!S.audioCtx) {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          S.audioCtx = new AC();
+        }
+        if (S.audioCtx.state === 'suspended') {
+          S.audioCtx.resume().catch(()=>{});
+        }
+        if (!S.mediaDest && S.audioCtx) {
+          try { S.mediaDest = S.audioCtx.createMediaStreamDestination(); } catch (_) {}
+        }
+      }
+      function midiToFreq(m) {
+        return 440 * Math.pow(2, (m - 69) / 12);
+      }
+      function keyToMidi(k) {
+        // A-Z 映射到两组八度（E3 开始），覆盖 24 个半音；其余循环
+        const idx = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.indexOf(k);
+        const base = 52; // E3
+        return base + (idx % 24);
+      }
+      function playPianoForKey(k) {
+        ensureCtx();
+        if (!S.audioCtx) return;
+        const now = S.audioCtx.currentTime;
+        const midi = keyToMidi(k);
+        const f0 = midiToFreq(midi);
+        const gain = S.audioCtx.createGain();
+        gain.gain.setValueAtTime(0, now);
+        // 琴键包络：快速攻击，短衰减，自然释音
+        gain.gain.linearRampToValueAtTime(0.9, now + 0.005);
+        gain.gain.exponentialRampToValueAtTime(0.22, now + 0.18);
+        gain.gain.exponentialRampToValueAtTime(0.0008, now + 0.6);
+
+        // 基音
+        const osc1 = S.audioCtx.createOscillator();
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(f0, now);
+
+        // 泛音（2x 频率，较低音量，微小失谐增强质感）
+        const osc2 = S.audioCtx.createOscillator();
+        osc2.type = 'triangle';
+        osc2.frequency.setValueAtTime(f0 * 2.01, now);
+
+        // 轻微滤波，柔化高频
+        const filter = S.audioCtx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.setValueAtTime(6200, now);
+        filter.Q.value = 0.7;
+
+        // 泛音独立增益更低
+        const g2 = S.audioCtx.createGain();
+        g2.gain.setValueAtTime(0.25, now);
+
+        osc1.connect(filter);
+        osc2.connect(g2);
+        g2.connect(filter);
+        filter.connect(gain);
+        gain.connect(S.audioCtx.destination);
+        if (S.mediaDest) { try { gain.connect(S.mediaDest); } catch (_) {} }
+
+        osc1.start(now);
+        osc2.start(now);
+        osc1.stop(now + 0.65);
+        osc2.stop(now + 0.65);
+        // 释放后断开，避免节点泄漏
+        setTimeout(() => {
+          try {
+            osc1.disconnect(); osc2.disconnect(); g2.disconnect(); filter.disconnect(); gain.disconnect();
+          } catch (_) {}
+        }, 800);
+      }
+      function togglePiano() {
+        S.soundOn = !!(el.pianoSwitch && el.pianoSwitch.checked);
+        if (el.btnRecord) el.btnRecord.style.display = S.soundOn ? '' : 'none';
+        if (S.soundOn) ensureCtx();
+      }
+
+      // 录制功能
+      function startRecording() {
+        ensureCtx();
+        if (!S.mediaDest) return;
+        try {
+          S.recordChunks = [];
+          S.recordBlob = null;
+          S.recorder = new MediaRecorder(S.mediaDest.stream);
+          S.recorder.ondataavailable = (e) => { if (e.data && e.data.size > 0) S.recordChunks.push(e.data); };
+          S.recorder.onstop = () => {
+            try { S.recordBlob = new Blob(S.recordChunks, { type: 'audio/webm' }); } catch (_) {}
+            // 录音完成后，如果结束弹窗已显示，立即显示“下载录音”按钮
+            try {
+              if (el.over && el.over.style.display === 'grid' && el.btnDownload) {
+                el.btnDownload.style.display = S.recordBlob ? '' : 'none';
+              }
+            } catch (_) {}
+          };
+          S.recorder.start();
+          S.isRecording = true;
+        } catch (_) {}
+      }
+      function stopRecording() {
+        try { if (S.recorder && S.isRecording) S.recorder.stop(); } catch (_) {}
+        S.isRecording = false;
+      }
+      function clearRecording() {
+        try { if (S.recorder && S.isRecording) S.recorder.stop(); } catch (_) {}
+        S.recorder = null; S.recordChunks = []; S.recordBlob = null; S.isRecording = false;
+      }
+      function downloadRecording() {
+        if (!S.recordBlob) return;
+        const url = URL.createObjectURL(S.recordBlob);
+        const a = document.createElement('a');
+        // 文件名：TypingRain-YYYYMMDD-HHMMSS.webm
+        const now = new Date();
+        const pad = n => String(n).padStart(2, '0');
+        const fname = `TypingRain-${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.webm`;
+        a.href = url; a.download = fname;
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(url); a.parentNode && a.parentNode.removeChild(a); }, 100);
+      }
       // 键盘
       function onKey(e) {
         if (!S.running || S.paused) return;
         const k = e.key.toUpperCase();
         if (k.length === 1 && ABC.includes(k)) {
           e.preventDefault();
+          if (S.soundOn) playPianoForKey(k);
           hitChar(k);
         }
       }
@@ -421,18 +664,39 @@
       document.addEventListener('keydown', onKey, { passive: false });
       el.btnStart.addEventListener('click', start);
       el.btnPause.addEventListener('click', pause);
-      el.btnReset.addEventListener('click', () => reset(true));
-      el.btnRestart.addEventListener('click', () => { reset(true); start(); });
-      el.btnLater.addEventListener('click', () => { reset(true); });
+      el.btnReset.addEventListener('click', () => { clearRecording(); if (el.pianoSwitch) el.pianoSwitch.checked = false; S.soundOn = false; reset(true); });
+      el.btnRestart.addEventListener('click', () => { clearRecording(); if (el.pianoSwitch) el.pianoSwitch.checked = false; S.soundOn = false; reset(true); start(); });
+      el.btnLater.addEventListener('click', () => {
+        clearRecording();
+        if (el.pianoSwitch) el.pianoSwitch.checked = false; S.soundOn = false;
+        reset(true);
+      });
       el.spdUp.addEventListener('click', () => setSpeed(+0.1));
       el.spdDown.addEventListener('click', () => setSpeed(-0.1));
       el.btnChallenge.addEventListener('click', toggleChallenge);
+      if (el.pianoSwitch) el.pianoSwitch.addEventListener('change', togglePiano);
+      if (el.btnRecord) el.btnRecord.addEventListener('click', () => {
+        if (!S.isRecording) { startRecording(); el.btnRecord.textContent = '停止录制'; }
+        else { stopRecording(); el.btnRecord.textContent = '录制'; }
+      });
+      el.btnBoard.addEventListener('click', toggleBoard);
+      if (el.btnDownload) el.btnDownload.addEventListener('click', () => { if (S.recordBlob) downloadRecording(); });
+      el.btnBoardClose.addEventListener('click', () => { el.boardModal.style.display = 'none'; });
+      // 点击遮罩关闭
+      el.boardModal.addEventListener('click', (e) => {
+        if (e.target === el.boardModal) el.boardModal.style.display = 'none';
+      });
+      // 初始化钢琴开关（默认关闭）
+      if (el.pianoSwitch) el.pianoSwitch.checked = false;
+      S.soundOn = false;
+      if (el.btnRecord) { el.btnRecord.textContent = '录制'; el.btnRecord.style.display = 'none'; }
 
       // 初始化
       reset(true);
       measure();
     })();
   </script>
+    </script>
     
         <style>
         .corner-links {
