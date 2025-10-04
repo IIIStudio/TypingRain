@@ -171,6 +171,8 @@
       <button id="btnPause">暂停</button>
       <button id="btnReset">重置</button>
       <button id="btnChallenge">挑战模式</button>
+      <button id="btnLeftHand">左手</button>
+      <button id="btnRightHand">右手</button>
       <button id="btnBoard">榜单</button>
     </div>
     <!-- 榜单弹窗 -->
@@ -216,6 +218,8 @@
         btnPause: document.getElementById('btnPause'),
         btnReset: document.getElementById('btnReset'),
         btnChallenge: document.getElementById('btnChallenge'),
+        btnLeftHand: document.getElementById('btnLeftHand'),
+        btnRightHand: document.getElementById('btnRightHand'),
         pianoSwitch: document.getElementById('pianoSwitch'),
         btnRecord: document.getElementById('btnRecord'),
         btnBoard: document.getElementById('btnBoard'),
@@ -234,10 +238,13 @@
 
       // 状态
       const ABC = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      const LEFT_SET = 'QWERTASDFGZXCVB';
+      const RIGHT_SET = 'YUIOPHJKLNM';
       const S = {
         running: false,
         paused: false,
         challenge: false,
+        handMode: 'both',
         score: 0,
         tries: 0,
         hits: 0,
@@ -309,7 +316,8 @@
         if (ts - S.lastSpawn < S.spawnMs) return;
         S.lastSpawn = ts;
 
-        const ch = ABC[(Math.random() * ABC.length) | 0];
+        const set = S.handMode === 'left' ? LEFT_SET : (S.handMode === 'right' ? RIGHT_SET : ABC);
+        const ch = set[(Math.random() * set.length) | 0];
         const x = Math.random() * Math.max(0, S.areaW - 40) + 8;
         const v = S.letterBase * (0.8 + Math.random() * 0.5); // px/s
         const elL = document.createElement('div');
@@ -674,6 +682,20 @@
       el.spdUp.addEventListener('click', () => setSpeed(+0.1));
       el.spdDown.addEventListener('click', () => setSpeed(-0.1));
       el.btnChallenge.addEventListener('click', toggleChallenge);
+      if (el.btnLeftHand) el.btnLeftHand.addEventListener('click', () => {
+        const mode = S.handMode === 'left' ? 'both' : 'left';
+        S.handMode = mode;
+        el.btnLeftHand.classList.toggle('active', mode === 'left');
+        el.btnRightHand.classList.toggle('active', mode === 'right');
+        clearLetters();
+      });
+      if (el.btnRightHand) el.btnRightHand.addEventListener('click', () => {
+        const mode = S.handMode === 'right' ? 'both' : 'right';
+        S.handMode = mode;
+        el.btnLeftHand.classList.toggle('active', mode === 'left');
+        el.btnRightHand.classList.toggle('active', mode === 'right');
+        clearLetters();
+      });
       if (el.pianoSwitch) el.pianoSwitch.addEventListener('change', togglePiano);
       if (el.btnRecord) el.btnRecord.addEventListener('click', () => {
         if (!S.isRecording) { startRecording(); el.btnRecord.textContent = '停止录制'; }
@@ -696,7 +718,9 @@
       measure();
     })();
   </script>
-      <style>
+    </script>
+    
+        <style>
         .corner-links {
             position: fixed;
             right: 20px;
